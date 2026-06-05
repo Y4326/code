@@ -18,7 +18,6 @@ warnings.filterwarnings('ignore')
 
 class Exp_Long_Term_Forecast(Exp_Basic):
     def __init__(self, args):
-        self._dataset_cache = {}
         super(Exp_Long_Term_Forecast, self).__init__(args)
 
     def _build_model(self):
@@ -27,21 +26,16 @@ class Exp_Long_Term_Forecast(Exp_Basic):
         if self.args.use_multi_gpu and self.args.use_gpu:
             model = nn.DataParallel(model, device_ids=self.args.device_ids)
             
-        train_data, _ = self._get_data(flag='train')
-        vali_data, _ = self._get_data(flag='val')
-        test_data, _ = self._get_data(flag='test')
+        train_data, train_loader = self._get_data(flag='train')
+        vali_data, vali_loader = self._get_data(flag='val')
+        test_data, test_loader = self._get_data(flag='test')
         
         model.prepare_dataset(train_data, vali_data, test_data)
         
         return model
 
     def _get_data(self, flag):
-        if flag in self._dataset_cache:
-            data_set = self._dataset_cache[flag]
-            _, data_loader = data_provider(self.args, flag, existing_dataset=data_set)
-            return data_set, data_loader
         data_set, data_loader = data_provider(self.args, flag)
-        self._dataset_cache[flag] = data_set
         return data_set, data_loader
 
     def _select_optimizer(self):
@@ -52,7 +46,7 @@ class Exp_Long_Term_Forecast(Exp_Basic):
         criterion = nn.MSELoss()
         return criterion
 
-    def vali(self, vali_data, vali_loader, criterion, mode='valid'):
+    def vali(self, vali_data, vali_loader, criterion):
         total_loss = []
         self.model.eval()
         with torch.no_grad():
@@ -67,9 +61,8 @@ class Exp_Long_Term_Forecast(Exp_Basic):
                 dec_inp = torch.zeros_like(batch_y[:, -self.args.pred_len:, :]).float()
                 dec_inp = torch.cat([batch_y[:, :self.args.label_len, :], dec_inp], dim=1).float().to(self.device)
                 # encoder - decoder
-                if self.args.model == 'RAFT':
-                    outputs = self.model(batch_x, index, mode=mode)
-
+                if self.args.model == 'STRAF':
+                    outputs = self.model(batch_x, index, mode='valid')
                 else:
                     if self.args.use_amp:
                         with torch.cuda.amp.autocast():
@@ -95,10 +88,6 @@ class Exp_Long_Term_Forecast(Exp_Basic):
         train_data, train_loader = self._get_data(flag='train')
         vali_data, vali_loader = self._get_data(flag='val')
         test_data, test_loader = self._get_data(flag='test')
-
-        #self.train_data=train_data
-        self.len_train = len(train_data)
-        self.len_valid = len(vali_data)
 
         path = os.path.join(self.args.checkpoints, setting)
         if not os.path.exists(path):
@@ -137,13 +126,8 @@ class Exp_Long_Term_Forecast(Exp_Basic):
                 dec_inp = torch.cat([batch_y[:, :self.args.label_len, :], dec_inp], dim=1).float().to(self.device)
 
                 # encoder - decoder
-                retrieval_outputs = None
-                if self.args.model == 'RAFT':
-                    model_out = self.model(batch_x, index, mode='train')
-                    if isinstance(model_out, tuple):
-                        outputs, retrieval_outputs = model_out
-                    else:
-                        outputs = model_out
+                if self.args.model == 'STRAF':
+                    outputs = self.model(batch_x, index, mode='train')
                 else:
                     if self.args.use_amp:
                         with torch.cuda.amp.autocast():
@@ -154,12 +138,7 @@ class Exp_Long_Term_Forecast(Exp_Basic):
                 f_dim = -1 if self.args.features == 'MS' else 0
                 outputs = outputs[:, -self.args.pred_len:, f_dim:]
                 batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
-                loss_main = criterion(outputs, batch_y)
-                loss = loss_main
-                if retrieval_outputs is not None and self.args.retrieval_loss_weight > 0:
-                    retrieval_outputs = retrieval_outputs[:, -self.args.pred_len:, f_dim:]
-                    loss_retrieval = criterion(retrieval_outputs, batch_y)
-                    loss = loss + self.args.retrieval_loss_weight * loss_retrieval
+                loss = criterion(outputs, batch_y)
                 train_loss.append(loss.item())
 
                 if (i + 1) % 100 == 0:
@@ -180,8 +159,8 @@ class Exp_Long_Term_Forecast(Exp_Basic):
 
             print("Epoch: {} cost time: {}".format(epoch + 1, time.time() - epoch_time))
             train_loss = np.average(train_loss)
-            vali_loss = self.vali(vali_data, vali_loader, criterion, mode='valid')
-            test_loss = self.vali(test_data, test_loader, criterion, mode='test')
+            vali_loss = self.vali(vali_data, vali_loader, criterion)
+            test_loss = self.vali(test_data, test_loader, criterion)
 
             print("Epoch: {0}, Steps: {1} | Train Loss: {2:.7f} Vali Loss: {3:.7f} Test Loss: {4:.7f}".format(
                 epoch + 1, train_steps, train_loss, vali_loss, test_loss))
@@ -225,8 +204,8 @@ class Exp_Long_Term_Forecast(Exp_Basic):
                 dec_inp = torch.zeros_like(batch_y[:, -self.args.pred_len:, :]).float()
                 dec_inp = torch.cat([batch_y[:, :self.args.label_len, :], dec_inp], dim=1).float().to(self.device)
                 # encoder - decoder
-                if self.args.model == 'RAFT':
-                    outputs = self.model(batch_x, index, mode='test')                
+                if self.args.model == 'STRAF':
+                    outputs = self.model(batch_x, index, mode='test')
                 else:
                     if self.args.use_amp:
                         with torch.cuda.amp.autocast():

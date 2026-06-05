@@ -21,19 +21,32 @@ if __name__ == '__main__':
                         help='task name, we currently support only long_term_forecast, options:[long_term_forecast]')
     parser.add_argument('--is_training', type=int, default=1, help='status')
     parser.add_argument('--model_id', type=str, default='temp', help='model id')
-    parser.add_argument('--model', type=str, default='RAFT',
-                        help='model name, options: [RAFT]')
+    parser.add_argument('--model', type=str, default='STRAF',
+                        help='model name, options: [STRAF]')
 
     # data loader
+    parser.add_argument('--data', type=str, default='ETTm1', help='dataset type')
+    parser.add_argument('--root_path', type=str, default='./data/ETT/', help='root path of the data file')
+    parser.add_argument('--data_path', type=str, default='ETTm1.csv', help='data file')
+
     # parser.add_argument('--data', type=str,default='traffic', help='dataset type')
     # parser.add_argument('--root_path', type=str, default='./data/traffic', help='root path of the data file')
     # parser.add_argument('--data_path', type=str, default='traffic.csv', help='data file')
-    parser.add_argument('--data', type=str,default='ETTh2', help='dataset type')
-    parser.add_argument('--root_path', type=str, default='./data/ETT', help='root path of the data file')
-    parser.add_argument('--data_path', type=str, default='ETTh2.csv', help='data file')
+
+    # parser.add_argument('--data', type=str,default='weather', help='dataset type')
+    # parser.add_argument('--root_path', type=str, default='./data/weather', help='root path of the data file')
+    # parser.add_argument('--data_path', type=str, default='weather.csv', help='data file')
+
+    # parser.add_argument('--data', type=str,default='exchange_rate', help='dataset type')
+    # parser.add_argument('--root_path', type=str, default='./data/exchange_rate', help='root path of the data file')
+    # parser.add_argument('--data_path', type=str, default='exchange_rate.csv', help='data file')
+
+
+    # electricity dataset
     # parser.add_argument('--data', type=str,default='electricity', help='dataset type')
     # parser.add_argument('--root_path', type=str, default='./data/electricity', help='root path of the data file')
     # parser.add_argument('--data_path', type=str, default='electricity.csv', help='data file')
+
     parser.add_argument('--features', type=str, default='M',
                         help='forecasting task, options:[M, S, MS]; M:multivariate predict multivariate, S:univariate predict univariate, MS:multivariate predict univariate')
     parser.add_argument('--target', type=str, default='OT', help='target feature in S or MS task')
@@ -42,9 +55,10 @@ if __name__ == '__main__':
     parser.add_argument('--checkpoints', type=str, default='./checkpoints/', help='location of model checkpoints')
 
     # forecasting task
-    parser.add_argument('--seq_len', type=int, default=192, help='input sequence length')
+    parser.add_argument('--seq_len', type=int, default=96, help='input sequence length')
     parser.add_argument('--label_len', type=int, default=48, help='start token length')
     parser.add_argument('--pred_len', type=int, default=96, help='prediction sequence length')
+    parser.add_argument('--stride', type=int, default=1, help='sliding window stride for building retrieval library')
     parser.add_argument('--seasonal_patterns', type=str, default='Monthly', help='subset for M4')
     parser.add_argument('--inverse', action='store_true', help='inverse output data', default=False)
 
@@ -57,24 +71,39 @@ if __name__ == '__main__':
     # model define
     parser.add_argument('--expand', type=int, default=2, help='expansion factor for Mamba')
     parser.add_argument('--d_conv', type=int, default=4, help='conv kernel size for Mamba')
-    parser.add_argument('--top_k', type=int, default=5, help='for TimesBlock')
+    parser.add_argument('--top_k', type=int, default=30, help='for TimesBlock')
     parser.add_argument('--num_kernels', type=int, default=6, help='for Inception')
-    # traffic dataset: 862 channels
+
+    #ETT
+    parser.add_argument('--enc_in', type=int, default=7, help='encoder input size')
+    parser.add_argument('--dec_in', type=int, default=7, help='decoder input size')
+    parser.add_argument('--c_out', type=int, default=7, help='output size')
+
+    # exchange_rate dataset: 8 channels (date + 8 features - date = 8)
+    # parser.add_argument('--enc_in', type=int, default=8, help='encoder input size')
+    # parser.add_argument('--dec_in', type=int, default=8, help='decoder input size')
+    # parser.add_argument('--c_out', type=int, default=8, help='output size')
+
+    # # traffic dataset: 862 channels
     # parser.add_argument('--enc_in', type=int, default=862, help='encoder input size')
     # parser.add_argument('--dec_in', type=int, default=862, help='decoder input size')
     # parser.add_argument('--c_out', type=int, default=862, help='output size')
+    
     # electricity dataset: 321 channels
     # parser.add_argument('--enc_in', type=int, default=321, help='encoder input size')
     # parser.add_argument('--dec_in', type=int, default=321, help='decoder input size')
     # parser.add_argument('--c_out', type=int, default=321, help='output size')
-    parser.add_argument('--enc_in', type=int, default=7, help='encoder input size')
-    parser.add_argument('--dec_in', type=int, default=7, help='decoder input size')
-    parser.add_argument('--c_out', type=int, default=7, help='output size')
+
+    # weather dataset: 21 channels (date + 21 features - date = 21)
+    # parser.add_argument('--enc_in', type=int, default=21, help='encoder input size')
+    # parser.add_argument('--dec_in', type=int, default=21, help='decoder input size')
+    # parser.add_argument('--c_out', type=int, default=21, help='output size')
+
     parser.add_argument('--d_model', type=int, default=512, help='dimension of model')
     parser.add_argument('--n_heads', type=int, default=8, help='num of heads')
     parser.add_argument('--e_layers', type=int, default=2, help='num of encoder layers')
     parser.add_argument('--d_layers', type=int, default=1, help='num of decoder layers')
-    parser.add_argument('--d_ff', type=int, default=512, help='dimension of fcn')
+    parser.add_argument('--d_ff', type=int, default=2048, help='dimension of fcn')
     parser.add_argument('--moving_avg', type=int, default=25, help='window size of moving average')
     parser.add_argument('--factor', type=int, default=1, help='attn factor')
     parser.add_argument('--distil', action='store_false',
@@ -101,24 +130,24 @@ if __name__ == '__main__':
     )
     parser.add_argument(
         '--n_period', type=int, default=3,
-        help='Number of Periods (only the smallest period is used)'
+        help='Number of Periods'
     )
     parser.add_argument(
-        '--topm', type=int, default=20,
+        '--topm', type=int, default=30,
         help='Number of Retrievals'
     )
     parser.add_argument(
-        '--retrieval_loss_weight', type=float, default=0.1,
-        help='weight for auxiliary retrieval-only loss'
+        '--sim_type', type=str, default='pearson',
+        help='Similarity type for retrieval: pearson, cosine, neg_l2, dtw'
     )
 
     # optimization
     parser.add_argument('--num_workers', type=int, default=10, help='data loader num workers')
     parser.add_argument('--itr', type=int, default=1, help='experiments times')
     parser.add_argument('--train_epochs', type=int, default=10, help='train epochs')
-    parser.add_argument('--batch_size', type=int, default=512, help='batch size of train input data')
+    parser.add_argument('--batch_size', type=int, default=256, help='batch size of train input data')
     parser.add_argument('--patience', type=int, default=10, help='early stopping patience')
-    parser.add_argument('--learning_rate', type=float, default=0.05, help='optimizer learning rate')
+    parser.add_argument('--learning_rate', type=float, default=0.01, help='optimizer learning rate')
     parser.add_argument('--des', type=str, default='test', help='exp description')
     parser.add_argument('--loss', type=str, default='MSE', help='loss function')
     parser.add_argument('--lradj', type=str, default='type1', help='adjust learning rate')

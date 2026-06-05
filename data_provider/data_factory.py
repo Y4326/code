@@ -9,10 +9,13 @@ data_dict = {
     'custom': Dataset_Custom,
     'traffic': Dataset_Custom,
     'electricity': Dataset_Custom,
+    'exchange_rate': Dataset_Custom,
+    'weather': Dataset_Custom,
+    'solar': Dataset_Custom,
 }
 
 
-def data_provider(args, flag, existing_dataset=None):
+def data_provider(args, flag):
     Data = data_dict[args.data]
     timeenc = 0 if args.embed != 'timeF' else 1
 
@@ -23,26 +26,26 @@ def data_provider(args, flag, existing_dataset=None):
 
     # We currently supports only forecasting
 
-    if existing_dataset is None:
-        data_set = Data(
-            args = args,
-            root_path=args.root_path,
-            data_path=args.data_path,
-            flag=flag,
-            size=[args.seq_len, args.label_len, args.pred_len],
-            features=args.features,
-            target=args.target,
-            timeenc=timeenc,
-            freq=freq,
-            seasonal_patterns=None # We do not use this option.
-        )
-    else:
-        data_set = existing_dataset
+    data_set = Data(
+        args = args,
+        root_path=args.root_path,
+        data_path=args.data_path,
+        flag=flag,
+        size=[args.seq_len, args.label_len, args.pred_len],
+        features=args.features,
+        target=args.target,
+        timeenc=timeenc,
+        freq=freq,
+        seasonal_patterns=None # We do not use this option.
+    )
     print(flag, len(data_set))
+    # Reduce num_workers for validation/test to avoid potential indexing issues
+    num_workers_safe = min(2, args.num_workers) if not shuffle_flag else args.num_workers
+
     data_loader = DataLoader(
         data_set,
         batch_size=batch_size,
         shuffle=shuffle_flag,
-        num_workers=args.num_workers,
+        num_workers=num_workers_safe,
         drop_last=drop_last)
     return data_set, data_loader
